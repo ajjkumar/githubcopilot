@@ -26,8 +26,13 @@ document.addEventListener("DOMContentLoaded", () => {
           participantsHTML = `
             <div class="participants-section">
               <strong>Participants:</strong>
-              <ul class="participants-list">
-                ${details.participants.map(email => `<li>${email}</li>`).join("")}
+              <ul class="participants-list" style="list-style-type: none; padding: 0;">
+                ${details.participants.map(email => `
+                  <li style="display: flex; align-items: center; justify-content: space-between; padding: 5px 0;">
+                    <span>${email}</span>
+                    <button class="delete-participant" data-email="${email}" style="background: none; border: none; color: red; cursor: pointer;">❌</button>
+                  </li>
+                `).join("")}
               </ul>
             </div>
           `;
@@ -56,10 +61,18 @@ document.addEventListener("DOMContentLoaded", () => {
         option.textContent = name;
         activitySelect.appendChild(option);
       });
+
+      // Attach delete button listeners after rendering
+      attachDeleteListeners();
     } catch (error) {
-      activitiesList.innerHTML = "<p>Failed to load activities. Please try again later.</p>";
+      showDialog("Failed to load activities. Please try again later.", true); // Show error message
       console.error("Error fetching activities:", error);
     }
+  }
+
+  // Function to refresh activities dynamically
+  async function refreshActivities() {
+    await fetchActivities();
   }
 
   // Handle form submission
@@ -80,27 +93,78 @@ document.addEventListener("DOMContentLoaded", () => {
       const result = await response.json();
 
       if (response.ok) {
-        messageDiv.textContent = result.message;
-        messageDiv.className = "success";
+        showDialog(result.message); // Show success message
         signupForm.reset();
+        await refreshActivities(); // Refresh activities dynamically
       } else {
-        messageDiv.textContent = result.detail || "An error occurred";
-        messageDiv.className = "error";
+        showDialog(result.detail || "An error occurred", true); // Show error message
       }
-
-      messageDiv.classList.remove("hidden");
-
-      // Hide message after 5 seconds
-      setTimeout(() => {
-        messageDiv.classList.add("hidden");
-      }, 5000);
     } catch (error) {
-      messageDiv.textContent = "Failed to sign up. Please try again.";
-      messageDiv.className = "error";
-      messageDiv.classList.remove("hidden");
+      showDialog("Failed to sign up. Please try again.", true); // Show error message
       console.error("Error signing up:", error);
     }
   });
+
+  // Function to show a dialog pop-up for messages
+  function showDialog(message, isError = false) {
+    const dialog = document.createElement('div');
+    dialog.style.position = 'fixed';
+    dialog.style.top = '50%';
+    dialog.style.left = '50%';
+    dialog.style.transform = 'translate(-50%, -50%)';
+    dialog.style.padding = '20px';
+    dialog.style.backgroundColor = isError ? 'red' : 'green';
+    dialog.style.color = 'white';
+    dialog.style.borderRadius = '5px';
+    dialog.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
+    dialog.style.zIndex = '1000';
+    dialog.textContent = message;
+
+    document.body.appendChild(dialog);
+
+    setTimeout(() => {
+      dialog.remove();
+    }, 3000);
+  }
+
+  // Function to unregister a participant
+  async function unregisterParticipant(email, activityName) {
+    try {
+      console.log(`Attempting to unregister ${email} from ${activityName}`);
+      const response = await fetch(`/activities/unregister`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, activity: activityName }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log(`Successfully unregistered ${email} from ${activityName}`);
+        showDialog(result.message); // Show success message
+        await refreshActivities(); // Refresh activities dynamically
+      } else {
+        const errorDetail = await response.json();
+        console.error("Failed to unregister participant:", errorDetail);
+        showDialog(errorDetail.detail || "An error occurred", true); // Show error message
+      }
+    } catch (error) {
+      console.error("Error unregistering participant:", error);
+      showDialog("Failed to unregister participant. Please try again.", true); // Show error message
+    }
+  }
+
+  // Function to attach delete button event listeners
+  function attachDeleteListeners() {
+    document.querySelectorAll('.delete-participant').forEach(button => {
+      button.addEventListener('click', (event) => {
+        const emailToRemove = event.target.getAttribute('data-email');
+        const activityName = event.target.closest('.activity-card').querySelector('h4').textContent;
+        unregisterParticipant(emailToRemove, activityName);
+      });
+    });
+  }
 
   // Initialize app
   fetchActivities();
